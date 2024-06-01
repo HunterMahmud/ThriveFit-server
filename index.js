@@ -1,7 +1,6 @@
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const express = require("express");
 const jwt = require("jsonwebtoken");
-// const cookieParser = require("cookie-parser");
 const cors = require("cors");
 require("dotenv").config();
 const port = process.env.PORT || 3000;
@@ -22,7 +21,6 @@ app.use(
 );
 
 app.use(express.json());
-// app.use(cookieParser());
 
 const uri = `mongodb+srv://${process.env.DB_USE}:${process.env.DB_PASS}@cluster0.9wkdqn0.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -37,7 +35,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    const booksCollection = client.db("dbname").collection("collectionname");
+    const userCollection = client.db("gymDB").collection("user");
    
     // verify functions
     // user defined middleware
@@ -66,31 +64,15 @@ async function run() {
     };
     // books related api
     //load all books data
-    app.get("/allBooks", verifyToken, async (req, res) => {
-      // console.log(req.cookies?.token);
-      let query = req.query;
-      // console.log(query);
-      if (query?.quantity == "0") {
-        query = { quantity: { $ne: 0 } };
-        // console.log(query);
-      }
-      const result = await booksCollection.find(query).toArray();
-      res.send(result);
-    });
-
-    //update book by id
-    app.patch("/updatebook/:id", async (req, res) => {
+    
+    app.post('/newsletter', async(req, res)=> {
       const info = req.body;
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      const updateInfo = {
-        $set: {
-          ...info,
-        },
-      };
-      const result = await booksCollection.updateOne(query, updateInfo);
+      // console.log(info);
+      const result = await userCollection.insertOne(info);
       res.send(result);
-    });
+    })
+
+ 
 
     
 
@@ -101,26 +83,12 @@ async function run() {
       const token = jwt.sign(user, process.env.SECRET, {
         expiresIn: "1h",
       });
-      const cookieOptions = {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
-      };
+      
 
-      res.cookie("token", token, cookieOptions).send({ success: true });
+      res.send({ token });
     });
 
-    // clearing Token
-    app.get("/logout", async (req, res) => {
-      const cookieOptions = {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
-      };
-      res
-        .clearCookie("token", { ...cookieOptions, maxAge: 0 })
-        .send({ success: true });
-    });
+   
 
     await client.db("admin").command({ ping: 1 });
     console.log(
