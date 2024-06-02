@@ -35,8 +35,12 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    const userCollection = client.db("gymDB").collection("user");
-   
+    const newsLetterCollection = client.db("gymDB").collection("newsletter");
+    const userCollection = client.db("gymDB").collection("users");
+    const trainerCollection = client.db("gymDB").collection("trainers");
+
+    //----------------------------------------------------
+    //----------------------------------------------------
     // verify functions
     // user defined middleware
     const verifyToken = async (req, res, next) => {
@@ -58,23 +62,46 @@ async function run() {
       const email = req?.user?.email;
       const query = { email };
       const user = await userCollection.findOne(query);
-      const isAdmin = user?.role === 'admin';
-      if(!isAdmin) return res.status(403).send({message: 'unauthorize access'});
+      const isAdmin = user?.role === "admin";
+      if (!isAdmin)
+        return res.status(403).send({ message: "unauthorize access" });
       next();
     };
-    // books related api
-    //load all books data
+
+    //----------------------------------------------------
+    //----------------------------------------------------
+
+    // user related api
+    app.post("/user", async (req, res) => {
+      const userInfo = req.body;
+      const query = { email: userInfo.email };
+      const isExists = await userCollection.findOne(query);
+      if (isExists) {
+        return res.send({ message: "user already exists", insertedId: null });
+      }
+      // console.log(userInfo);
+      userInfo.role = "member";
+      const result = await userCollection.insertOne(userInfo);
+      res.send(result);
+    });
+
+    //----------------------------------------------------
+    //----------------------------------------------------
+    // trainer related api
+    app.post("/trainers", async (req, res) => {
+      const trainerInfo = req.body;
+      console.log(trainerInfo);
+      const result = await trainerCollection.insertOne(trainerInfo);
+      res.send(result);
+    });
     
-    app.post('/newsletter', async(req, res)=> {
-      const info = req.body;
-      // console.log(info);
-      const result = await userCollection.insertOne(info);
+    app.get('/trainers', async(req,res)=>{
+      const result = await trainerCollection.find().toArray();
       res.send(result);
     })
 
- 
-
-    
+    //----------------------------------------------------
+    //----------------------------------------------------
 
     //jwt related api
     //jwt sign / token generate when login
@@ -83,12 +110,26 @@ async function run() {
       const token = jwt.sign(user, process.env.SECRET, {
         expiresIn: "1h",
       });
-      
 
       res.send({ token });
     });
 
-   
+    //----------------------------------------------------
+    //----------------------------------------------------
+
+    /// other api
+    //newsletter post
+    app.post("/newsletter", async (req, res) => {
+      const info = req.body;
+      // console.log(info);
+      const result = await newsLetterCollection.insertOne(info);
+      res.send(result);
+    });
+    //newsletter get
+    app.get("/newsletter", async (req, res) => {
+      const result = await newsLetterCollection.find().toArray();
+      res.send(result);
+    });
 
     await client.db("admin").command({ ping: 1 });
     console.log(
