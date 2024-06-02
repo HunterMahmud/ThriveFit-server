@@ -38,6 +38,7 @@ async function run() {
     const newsLetterCollection = client.db("gymDB").collection("newsletter");
     const userCollection = client.db("gymDB").collection("users");
     const trainerCollection = client.db("gymDB").collection("trainers");
+    const classeCollection = client.db("gymDB").collection("classes");
 
     //----------------------------------------------------
     //----------------------------------------------------
@@ -124,6 +125,36 @@ async function run() {
     //----------------------------------------------------
 
     /// other api
+
+    // classes apis
+   
+    app.get('/classes', async (req, res) => {
+      try {
+        const classes = await classeCollection.find().toArray();
+        
+        const classesWithTrainers = await Promise.all(classes.map(async (classItem) => {
+          const foundTrainers = await trainerCollection.find({
+            skills: { $elemMatch: { value: classItem.name.toLowerCase() } }
+          }).project({
+            _id: 1,
+            fullName: 1,
+            profileImage: 1
+          }).toArray();
+  
+          return {
+            ...classItem,
+            foundTrainers
+          };
+        }));
+  
+        res.send(classesWithTrainers);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send('Internal Server Error');
+      }
+    });
+
+
     //newsletter post
     app.post("/newsletter", async (req, res) => {
       const info = req.body;
