@@ -91,7 +91,11 @@ async function run() {
     // trainer related api
     app.post("/trainers", async (req, res) => {
       const trainerInfo = req.body;
-      console.log(trainerInfo);
+      // console.log(trainerInfo);
+      const isExists = await trainerCollection.findOne({email:trainerInfo.email})
+      if(isExists){
+        return res.send({message:'pending'})
+      }
       const result = await trainerCollection.insertOne(trainerInfo);
       res.send(result);
     });
@@ -127,7 +131,7 @@ async function run() {
     /// other api
 
     // classes apis
-   
+   // get all the class with full details
     app.get('/classes', async (req, res) => {
       try {
         const classes = await classeCollection.find().toArray();
@@ -153,6 +157,14 @@ async function run() {
         res.status(500).send('Internal Server Error');
       }
     });
+    // get only class names
+    app.get('/classnames', async(req,res)=>{
+      const options = {
+        projection: { _id: 0, name: 1},
+      };
+      const result = await classeCollection.find({}, options).toArray();
+      res.send(result)
+    })
 
 
     //newsletter post
