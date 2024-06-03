@@ -39,6 +39,7 @@ async function run() {
     const userCollection = client.db("gymDB").collection("users");
     const trainerCollection = client.db("gymDB").collection("trainers");
     const classeCollection = client.db("gymDB").collection("classes");
+    const paymentCollection = client.db("gymDB").collection("payments");
 
     //----------------------------------------------------
     //----------------------------------------------------
@@ -71,6 +72,31 @@ async function run() {
 
     //----------------------------------------------------
     //----------------------------------------------------
+    //booking related api
+    app.post('/payment', async(req,res)=>{
+      const paymentInfo = req.body;
+      // console.log(paymentInfo);
+      const result = await paymentCollection.insertOne(paymentInfo);
+      res.send(result);
+    })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    //----------------------------------------------------
+    //----------------------------------------------------
 
     // user related api
     app.post("/user", async (req, res) => {
@@ -86,9 +112,25 @@ async function run() {
       res.send(result);
     });
 
+    // user role update method using patch by email
+    app.patch('/user/:email', async(req,res)=>{
+      const email = req.params.email;
+      const {role} = req.body;
+      // console.log(email);
+      const updateDoc = {
+        $set: {
+          role: `${role}`
+        },
+      };
+      // console.log(role);
+      const result = await userCollection.updateOne({email},updateDoc);
+      res.send(result);
+    })
+
     //----------------------------------------------------
     //----------------------------------------------------
     // trainer related api
+    //apply for trainers from member
     app.post("/trainers", async (req, res) => {
       const trainerInfo = req.body;
       // console.log(trainerInfo);
@@ -99,16 +141,27 @@ async function run() {
       const result = await trainerCollection.insertOne(trainerInfo);
       res.send(result);
     });
-    
+    // load all trainers with status is success
     app.get('/trainers', async(req,res)=>{
-      const result = await trainerCollection.find().toArray();
+      const query = {status:'success'}
+      const result = await trainerCollection.find(query).toArray();
       res.send(result);
     })
+    //load trainer by id
     app.get('/trainers/:id', async(req, res)=>{
       const id = req.params.id;
       const query = {_id: new ObjectId(id)};
       const result = await trainerCollection.findOne(query);
       res.send(result);
+    })
+    //delete specific trainers by id
+    app.delete('/trainers/:id',async(req,res)=>{
+      const id = req.params.id;
+      console.log(id);
+      const query = {_id:new ObjectId(id)};
+      const result = await trainerCollection.deleteOne(query);
+      res.send(result);
+
     })
 
     //----------------------------------------------------
