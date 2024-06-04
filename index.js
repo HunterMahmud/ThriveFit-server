@@ -127,6 +127,9 @@ async function run() {
       res.send(result);
     })
 
+
+
+
     //----------------------------------------------------
     //----------------------------------------------------
     // trainer related api
@@ -141,9 +144,11 @@ async function run() {
       const result = await trainerCollection.insertOne(trainerInfo);
       res.send(result);
     });
-    // load all trainers with status is success
+    // load all trainers with status is success/pending depends on query
     app.get('/trainers', async(req,res)=>{
-      const query = {status:'success'}
+      const {status} = req.query;
+      // console.log(status);
+      const query = {status}
       const result = await trainerCollection.find(query).toArray();
       res.send(result);
     })
@@ -163,6 +168,19 @@ async function run() {
       res.send(result);
 
     })
+    // find trainers by id and update the status by pending to success
+    app.patch('/trainers/:id', async(req,res)=>{
+      const id = req.params.id;
+      console.log(id);
+      const query = {_id: new ObjectId(id)};
+      const updateDoc = {
+        $set:{
+          status:'success'
+        }
+      }
+      const result = await trainerCollection.updateOne(query, updateDoc);
+      res.send(result);
+    })
 
     //----------------------------------------------------
     //----------------------------------------------------
@@ -178,10 +196,7 @@ async function run() {
       res.send({ token });
     });
 
-    //----------------------------------------------------
-    //----------------------------------------------------
 
-    /// other api
 
     // classes apis
    // get all the class with full details
@@ -218,8 +233,86 @@ async function run() {
       const result = await classeCollection.find({}, options).toArray();
       res.send(result)
     })
+    /// add new class
+    app.post('/classes', async(req,res)=>{
+      const classInfo = req.body;
+      // console.log(classInfo);
+      const result = await classeCollection.insertOne(classInfo);
+      res.send(result);
+    })
+    
 
 
+    //----------------------------------------------------
+    //----------------------------------------------------
+// total balance and get 6 leatest transactins details
+    app.get('/balance-transactions', async (req, res) => {
+      try {
+        // Calculate total balance
+        const balancePipeline = [
+          {
+            $addFields: {
+              priceInt: { $toInt: "$price" }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              totalBalance: { $sum: "$priceInt" }
+            }
+          }
+        ];
+        const balanceResult = await paymentCollection.aggregate(balancePipeline).toArray();
+        const totalBalance = balanceResult[0]?.totalBalance || 0;
+    
+        // Fetch recent transactions
+        const sort = { orderDate: -1 }; // Sort by orderDate descending
+        const limit = 6; // Limit to 6 recent transactions
+        const transactions = await paymentCollection.find().sort(sort).limit(limit).toArray();
+        const formattedTransactions = transactions.map((t) => ({
+          username: t.userName,
+          orderDate: t.orderDate,
+          price: t.price,
+        }));
+    
+        // Send combined result
+        res.json({ totalBalance, transactions: formattedTransactions });
+      } catch (err) {
+        console.error('Error getting balance and transactions:', err);
+        res.status(500).send('Internal server error');
+      }
+    });
+
+
+    //get all the unique email occured in payments collection
+    
+    app.get('/unique-emails', async (req, res) => {
+      try {
+        const pipeline = [
+          {
+            $group: {
+              _id: "$userEmail"
+            }
+          },
+          {
+            $count: "uniqueEmails"
+          }
+        ];
+    
+        const result = await paymentCollection.aggregate(pipeline).toArray();
+        const totalPaidUser = result[0]?.uniqueEmails || 0;
+        const totalNewsLetterSubscriber = await newsLetterCollection.estimatedDocumentCount();
+    
+        res.json({ totalPaidUser, totalNewsLetterSubscriber });
+      } catch (err) {
+        res.status(500).send('Internal server error');
+      }
+    });
+    
+    
+    //----------------------------------------------------
+    //----------------------------------------------------
+    /// other api
     //newsletter post
     app.post("/newsletter", async (req, res) => {
       const info = req.body;
