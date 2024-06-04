@@ -40,6 +40,7 @@ async function run() {
     const trainerCollection = client.db("gymDB").collection("trainers");
     const classeCollection = client.db("gymDB").collection("classes");
     const paymentCollection = client.db("gymDB").collection("payments");
+    const forumCollection = client.db("gymDB").collection("forums");
 
     //----------------------------------------------------
     //----------------------------------------------------
@@ -59,6 +60,17 @@ async function run() {
         next();
       });
     };
+
+    //jwt related api
+    //jwt sign / token generate when login
+    app.post("/jwt", async (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.SECRET, {
+        expiresIn: "1h",
+      });
+
+      res.send({ token });
+    });
     //verify admin
     const verifyAdmin = async (req, res, next) => {
       const email = req?.user?.email;
@@ -73,27 +85,105 @@ async function run() {
     //----------------------------------------------------
     //----------------------------------------------------
     //booking related api
-    app.post('/payment', async(req,res)=>{
+    app.post("/payment", async (req, res) => {
       const paymentInfo = req.body;
       // console.log(paymentInfo);
       const result = await paymentCollection.insertOne(paymentInfo);
       res.send(result);
-    })
+    });
 
+    //----------------------------------------------------
+    //----------------------------------------------------
+    //slot related api
+    // get all slot of the specific user by user email
+    app.get("/trainer-slots/:email", async (req, res) => {
+      const email = req.params.email;
+      // console.log(email);
+      try {
+        const trainer = await trainerCollection.findOne({ email });
+        if (!trainer) {
+          return res.status(404).json({ error: "Trainer not found" });
+        }
 
+        const slots = trainer.availableTime;
+        // console.log("slots: ",slots);
+        // Get the payment info for the slots
+        const payments = await paymentCollection
+          .find({ trainerEmail: email })
+          .toArray();
+        // console.log("payments: ",payments);
+        // Combine slots and payment info
 
+        res.json({ payments, slots });
+      } catch (err) {
+        // console.error('Error getting trainer slots:', err);
+        res.status(500).send("Internal server error");
+      }
+    });
 
+    // add new slot to the 
+    app.post('/trainer-add-slot/:email', async (req, res) => {
+      const { email } = req.params;
+      const { slotName, slotTime, availableDays, selectedClasses } = req.body;
+  
+      try {
+        const result = await trainerCollection.updateOne(
+          { email},
+          { 
+            $push: {
+              slots: {
+                slotName,
+                slotTime,
+                availableDays,
+                selectedClasses
+              }
+            }
+          }
+        );
+  
+        if (result.modifiedCount > 0) {
+          res.status(200).send({message: 'Slot added successfully'});
+        } else {
+          res.status(404).send('Trainer not found');
+        }
+      } catch (err) {
+        console.error('Error adding slot:', err);
+        res.status(500).send('Internal server error');
+      }
+    });
+  
 
-
-
-
-
-
-
-
-
-
-
+    //delete a slot by trainers email and slotValue  // need to update
+    app.delete('/trainer-slots/:email/:slotValue', async (req, res) => {
+      const { email, slotValue } = req.params;
+    
+      try {
+        const trainer = await trainerCollection.findOne({ email });
+    
+        if (!trainer) {
+          return res.status(404).json({ error: 'Trainer not found' });
+        }
+    
+        // Filter out the slot to delete
+        const updatedSlots = trainer.availableTime.filter(slot => slot.value !== slotValue);
+    
+        // Update the trainer document with the new availableTime array
+        const result = await trainerCollection.updateOne(
+          { email },
+          { $set: { availableTime: updatedSlots } }
+        );
+    
+        if (result.modifiedCount === 1) {
+          res.json({ message: 'Slot deleted successfully' });
+        } else {
+          res.status(500).json({ error: 'Failed to delete slot' });
+        }
+      } catch (err) {
+        console.error('Error deleting slot:', err);
+        res.status(500).send('Internal server error');
+      }
+    });
+    
 
     //----------------------------------------------------
     //----------------------------------------------------
@@ -113,22 +203,19 @@ async function run() {
     });
 
     // user role update method using patch by email
-    app.patch('/user/:email', async(req,res)=>{
+    app.patch("/user/:email", async (req, res) => {
       const email = req.params.email;
-      const {role} = req.body;
+      const { role } = req.body;
       // console.log(email);
       const updateDoc = {
         $set: {
-          role: `${role}`
+          role: `${role}`,
         },
       };
       // console.log(role);
-      const result = await userCollection.updateOne({email},updateDoc);
+      const result = await userCollection.updateOne({ email }, updateDoc);
       res.send(result);
-    })
-
-
-
+    });
 
     //----------------------------------------------------
     //----------------------------------------------------
@@ -137,179 +224,181 @@ async function run() {
     app.post("/trainers", async (req, res) => {
       const trainerInfo = req.body;
       // console.log(trainerInfo);
-      const isExists = await trainerCollection.findOne({email:trainerInfo.email})
-      if(isExists){
-        return res.send({message:'pending'})
+      const isExists = await trainerCollection.findOne({
+        email: trainerInfo.email,
+      });
+      if (isExists) {
+        return res.send({ message: "pending" });
       }
       const result = await trainerCollection.insertOne(trainerInfo);
       res.send(result);
     });
     // load all trainers with status is success/pending depends on query
-    app.get('/trainers', async(req,res)=>{
-      const {status} = req.query;
+    app.get("/trainers", async (req, res) => {
+      const { status } = req.query;
       // console.log(status);
-      const query = {status}
+      const query = { status };
       const result = await trainerCollection.find(query).toArray();
       res.send(result);
-    })
+    });
     //load trainer by id
-    app.get('/trainers/:id', async(req, res)=>{
-      const id = req.params.id;
-      const query = {_id: new ObjectId(id)};
+    app.get("/trainers/:data", async (req, res) => {
+      const data = req.params.data;
+      let query = {};
+      if(data.includes('@')){
+        query = {email:data};
+      }
+      else{
+        query = { _id: new ObjectId(data) };
+      }
       const result = await trainerCollection.findOne(query);
       res.send(result);
-    })
+    });
     //delete specific trainers by id
-    app.delete('/trainers/:id',async(req,res)=>{
+    app.delete("/trainers/:id", async (req, res) => {
       const id = req.params.id;
       console.log(id);
-      const query = {_id:new ObjectId(id)};
+      const query = { _id: new ObjectId(id) };
       const result = await trainerCollection.deleteOne(query);
       res.send(result);
-
-    })
+    });
     // find trainers by id and update the status by pending to success
-    app.patch('/trainers/:id', async(req,res)=>{
+    app.patch("/trainers/:id", async (req, res) => {
       const id = req.params.id;
       console.log(id);
-      const query = {_id: new ObjectId(id)};
+      const query = { _id: new ObjectId(id) };
       const updateDoc = {
-        $set:{
-          status:'success'
-        }
-      }
+        $set: {
+          status: "success",
+        },
+      };
       const result = await trainerCollection.updateOne(query, updateDoc);
       res.send(result);
-    })
-
-    //----------------------------------------------------
-    //----------------------------------------------------
-
-    //jwt related api
-    //jwt sign / token generate when login
-    app.post("/jwt", async (req, res) => {
-      const user = req.body;
-      const token = jwt.sign(user, process.env.SECRET, {
-        expiresIn: "1h",
-      });
-
-      res.send({ token });
     });
 
-
+    //----------------------------------------------------
+    //----------------------------------------------------
 
     // classes apis
-   // get all the class with full details
-    app.get('/classes', async (req, res) => {
+    // get all the class with full details
+    app.get("/classes", async (req, res) => {
       try {
         const classes = await classeCollection.find().toArray();
-        
-        const classesWithTrainers = await Promise.all(classes.map(async (classItem) => {
-          const foundTrainers = await trainerCollection.find({
-            skills: { $elemMatch: { value: classItem.name.toLowerCase() } }
-          }).project({
-            _id: 1,
-            fullName: 1,
-            profileImage: 1
-          }).toArray();
-  
-          return {
-            ...classItem,
-            foundTrainers
-          };
-        }));
-  
+
+        const classesWithTrainers = await Promise.all(
+          classes.map(async (classItem) => {
+            const foundTrainers = await trainerCollection
+              .find({
+                skills: { $elemMatch: { value: classItem.name.toLowerCase() } },
+              })
+              .project({
+                _id: 1,
+                fullName: 1,
+                profileImage: 1,
+              })
+              .toArray();
+
+            return {
+              ...classItem,
+              foundTrainers,
+            };
+          })
+        );
+
         res.send(classesWithTrainers);
       } catch (error) {
         console.error(error);
-        res.status(500).send('Internal Server Error');
+        res.status(500).send("Internal Server Error");
       }
     });
     // get only class names
-    app.get('/classnames', async(req,res)=>{
+    app.get("/classnames", async (req, res) => {
       const options = {
-        projection: { _id: 0, name: 1},
+        projection: { _id: 0, name: 1 },
       };
       const result = await classeCollection.find({}, options).toArray();
-      res.send(result)
-    })
+      res.send(result);
+    });
     /// add new class
-    app.post('/classes', async(req,res)=>{
+    app.post("/classes", async (req, res) => {
       const classInfo = req.body;
       // console.log(classInfo);
       const result = await classeCollection.insertOne(classInfo);
       res.send(result);
-    })
-    
-
+    });
 
     //----------------------------------------------------
     //----------------------------------------------------
-// total balance and get 6 leatest transactins details
-    app.get('/balance-transactions', async (req, res) => {
+    // total balance and get 6 leatest transactins details
+    app.get("/balance-transactions", async (req, res) => {
       try {
         // Calculate total balance
         const balancePipeline = [
           {
             $addFields: {
-              priceInt: { $toInt: "$price" }
-            }
+              priceInt: { $toInt: "$price" },
+            },
           },
           {
             $group: {
               _id: null,
-              totalBalance: { $sum: "$priceInt" }
-            }
-          }
+              totalBalance: { $sum: "$priceInt" },
+            },
+          },
         ];
-        const balanceResult = await paymentCollection.aggregate(balancePipeline).toArray();
+        const balanceResult = await paymentCollection
+          .aggregate(balancePipeline)
+          .toArray();
         const totalBalance = balanceResult[0]?.totalBalance || 0;
-    
+
         // Fetch recent transactions
         const sort = { orderDate: -1 }; // Sort by orderDate descending
         const limit = 6; // Limit to 6 recent transactions
-        const transactions = await paymentCollection.find().sort(sort).limit(limit).toArray();
+        const transactions = await paymentCollection
+          .find()
+          .sort(sort)
+          .limit(limit)
+          .toArray();
         const formattedTransactions = transactions.map((t) => ({
           username: t.userName,
           orderDate: t.orderDate,
           price: t.price,
         }));
-    
+
         // Send combined result
         res.json({ totalBalance, transactions: formattedTransactions });
       } catch (err) {
-        console.error('Error getting balance and transactions:', err);
-        res.status(500).send('Internal server error');
+        console.error("Error getting balance and transactions:", err);
+        res.status(500).send("Internal server error");
       }
     });
 
-
     //get all the unique email occured in payments collection
-    
-    app.get('/unique-emails', async (req, res) => {
+
+    app.get("/unique-emails", async (req, res) => {
       try {
         const pipeline = [
           {
             $group: {
-              _id: "$userEmail"
-            }
+              _id: "$userEmail",
+            },
           },
           {
-            $count: "uniqueEmails"
-          }
+            $count: "uniqueEmails",
+          },
         ];
-    
+
         const result = await paymentCollection.aggregate(pipeline).toArray();
         const totalPaidUser = result[0]?.uniqueEmails || 0;
-        const totalNewsLetterSubscriber = await newsLetterCollection.estimatedDocumentCount();
-    
+        const totalNewsLetterSubscriber =
+          await newsLetterCollection.estimatedDocumentCount();
+
         res.json({ totalPaidUser, totalNewsLetterSubscriber });
       } catch (err) {
-        res.status(500).send('Internal server error');
+        res.status(500).send("Internal server error");
       }
     });
-    
-    
+
     //----------------------------------------------------
     //----------------------------------------------------
     /// other api
@@ -325,6 +414,31 @@ async function run() {
       const result = await newsLetterCollection.find().toArray();
       res.send(result);
     });
+    
+    //forums related api
+      // Add Forum Post API
+  app.post('/forums', async (req, res) => {
+    const { title, content, imageUrl, author, email, role } = req.body;
+
+    const newPost = {
+      title,
+      content,
+      imageUrl, // Add imageUrl to the newPost object
+      author,
+      email,
+      role,
+      createdAt: new Date()
+    };
+
+    try {
+      const result = await forumCollection.insertOne(newPost);
+
+     res.send(result);
+    } catch (err) {
+      console.error('Error adding forum post:', err);
+      res.status(500).send('Internal server error');
+    }
+  });
 
     await client.db("admin").command({ ping: 1 });
     console.log(
