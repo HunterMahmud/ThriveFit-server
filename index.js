@@ -338,10 +338,21 @@ async function run() {
     //----------------------------------------------------
 
     // classes apis
-    // get all the class with full details with all trainers who have this class
+    // get all the class with full details with all trainers who have this class with pagination and search functionality
     app.get("/classes", async (req, res) => {
       try {
-        const classes = await classeCollection.find().toArray();
+        const { page = 1, limit = 6, search = "" } = req.query;
+        const skip = (page - 1) * limit;
+        
+        // Create a filter object for the search functionality
+        const filter = search ? { name: { $regex: search, $options: "i" } } : {};
+        
+        const classes = await classeCollection.find(filter)
+          .skip(skip)
+          .limit(parseInt(limit))
+          .toArray();
+    
+        const totalClasses = await classeCollection.countDocuments(filter);
     
         const classesWithTrainers = await Promise.all(
           classes.map(async (classItem) => {
@@ -363,12 +374,19 @@ async function run() {
           })
         );
     
-        res.send(classesWithTrainers);
+        res.json({
+          classes: classesWithTrainers,
+          totalClasses,
+          totalPages: Math.ceil(totalClasses / limit),
+          currentPage: parseInt(page),
+        });
       } catch (error) {
         console.error(error);
         res.status(500).send("Internal Server Error");
       }
     });
+    
+    
     
     // get only class names
     app.get("/classnames", async (req, res) => {
