@@ -277,21 +277,26 @@ async function run() {
       const result = await trainerCollection.insertOne(trainerInfo);
       res.send(result);
     });
-    app.patch('/trainers/:id/reject', async(req,res)=> {
+    //reject the trainer by id
+    app.patch("/trainers/:id/reject", async (req, res) => {
       const id = req.params.id;
-      const query = {_id: new ObjectId(id)};
-      const options = {$upsert: true};
-      const {feedback} = req.body;
+      const query = { _id: new ObjectId(id) };
+      const options = { $upsert: true };
+      const { feedback } = req.body;
       // console.log(info);
       const updatedDoc = {
         $set: {
-          status: 'rejected',
-          feedbackMessage: feedback
+          status: "rejected",
+          feedbackMessage: feedback,
         },
-      }
-      const result = await trainerCollection.updateOne(query,updatedDoc,options);
+      };
+      const result = await trainerCollection.updateOne(
+        query,
+        updatedDoc,
+        options
+      );
       res.send(result);
-})
+    });
     // load all trainers with status is success/pending depends on query
     app.get("/trainers", async (req, res) => {
       const { status } = req.query;
@@ -343,17 +348,20 @@ async function run() {
       try {
         const { page = 1, limit = 6, search = "" } = req.query;
         const skip = (page - 1) * limit;
-        
+
         // Create a filter object for the search functionality
-        const filter = search ? { name: { $regex: search, $options: "i" } } : {};
-        
-        const classes = await classeCollection.find(filter)
+        const filter = search
+          ? { name: { $regex: search, $options: "i" } }
+          : {};
+
+        const classes = await classeCollection
+          .find(filter)
           .skip(skip)
           .limit(parseInt(limit))
           .toArray();
-    
+
         const totalClasses = await classeCollection.countDocuments(filter);
-    
+
         const classesWithTrainers = await Promise.all(
           classes.map(async (classItem) => {
             const foundTrainers = await trainerCollection
@@ -366,14 +374,14 @@ async function run() {
                 profileImage: 1,
               })
               .toArray();
-    
+
             return {
               ...classItem,
               foundTrainers,
             };
           })
         );
-    
+
         res.json({
           classes: classesWithTrainers,
           totalClasses,
@@ -385,9 +393,23 @@ async function run() {
         res.status(500).send("Internal Server Error");
       }
     });
-    
-    
-    
+
+    /// get featured class by its popularity
+
+    app.get("/featured-classes", async (req, res) => {
+      try {
+        const featuredClasses = await classeCollection
+          .find()
+          .sort({ totalBooked: -1 })
+          .limit(6)
+          .toArray();
+        res.send(featuredClasses);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send("Internal Server Error");
+      }
+    });
+
     // get only class names
     app.get("/classnames", async (req, res) => {
       const options = {
@@ -400,7 +422,7 @@ async function run() {
     app.post("/classes", async (req, res) => {
       const classInfo = req.body;
       // console.log(classInfo);
-      
+
       const result = await classeCollection.insertOne(classInfo);
       res.send(result);
     });
@@ -505,6 +527,21 @@ async function run() {
         res.status(500).send("Internal server error");
       }
     });
+    ////get 4-6 leatest post by time stamp
+    app.get("/latest-posts", async (req, res) => {
+      try {
+        const latestPosts = await forumCollection
+          .find()
+          .sort({ createdAt: -1 })
+          .limit(6)
+          .toArray();
+        res.send(latestPosts);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send("Internal Server Error");
+      }
+    });
+  
     // Get posts with pagination
     app.get("/api/posts", async (req, res) => {
       try {
