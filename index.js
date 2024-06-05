@@ -60,6 +60,16 @@ async function run() {
         next();
       });
     };
+    //verify admin middleware
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded?.email;
+      const user = await userCollection.findOne({ email });
+
+      if (user?.role !== "admin") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
 
     //jwt related api
     //jwt sign / token generate when login
@@ -71,16 +81,6 @@ async function run() {
 
       res.send({ token });
     });
-    //verify admin
-    const verifyAdmin = async (req, res, next) => {
-      const email = req?.user?.email;
-      const query = { email };
-      const user = await userCollection.findOne(query);
-      const isAdmin = user?.role === "admin";
-      if (!isAdmin)
-        return res.status(403).send({ message: "unauthorize access" });
-      next();
-    };
 
     //----------------------------------------------------
     //----------------------------------------------------
@@ -92,6 +92,22 @@ async function run() {
       res.send(result);
     });
 
+    //----------------------------------------------------
+    //----------------------------------------------------
+    // admin related api
+    //checking using admin or not
+    app.get("/user/role/:email", async (req, res) => {
+      const email = req.params.email;
+      //Todo: make this below line un comment when jwt and other verification done
+      // if(email!==req.decoded.email){
+      //   return res.status(403).send({message: 'forbidden access'})
+      // }
+      const user = await userCollection.findOne({ email });
+      if (user?.role) {
+        res.send({ role: user?.role });
+      }
+      res.send({ message: "user not authorized" });
+    });
     //----------------------------------------------------
     //----------------------------------------------------
     //slot related api
@@ -121,74 +137,75 @@ async function run() {
       }
     });
 
-    // add new slot to the 
-    app.post('/trainer-add-slot/:email', async (req, res) => {
+    // add new slot to the
+    app.post("/trainer-add-slot/:email", async (req, res) => {
       const { email } = req.params;
       const { slotName, slotTime, availableDays, selectedClasses } = req.body;
-  
+
       try {
         const result = await trainerCollection.updateOne(
-          { email},
-          { 
+          { email },
+          {
             $push: {
               slots: {
                 slotName,
                 slotTime,
                 availableDays,
-                selectedClasses
-              }
-            }
+                selectedClasses,
+              },
+            },
           }
         );
-  
+
         if (result.modifiedCount > 0) {
-          res.status(200).send({message: 'Slot added successfully'});
+          res.status(200).send({ message: "Slot added successfully" });
         } else {
-          res.status(404).send('Trainer not found');
+          res.status(404).send("Trainer not found");
         }
       } catch (err) {
-        console.error('Error adding slot:', err);
-        res.status(500).send('Internal server error');
+        console.error("Error adding slot:", err);
+        res.status(500).send("Internal server error");
       }
     });
-  
 
     //delete a slot by trainers email and slotValue  // need to update
-    app.delete('/trainer-slots/:email/:slotValue', async (req, res) => {
+    app.delete("/trainer-slots/:email/:slotValue", async (req, res) => {
       const { email, slotValue } = req.params;
-    
+
       try {
         const trainer = await trainerCollection.findOne({ email });
-    
+
         if (!trainer) {
-          return res.status(404).json({ error: 'Trainer not found' });
+          return res.status(404).json({ error: "Trainer not found" });
         }
-    
+
         // Filter out the slot to delete
-        const updatedSlots = trainer.availableTime.filter(slot => slot.value !== slotValue);
-    
+        const updatedSlots = trainer.availableTime.filter(
+          (slot) => slot.value !== slotValue
+        );
+
         // Update the trainer document with the new availableTime array
         const result = await trainerCollection.updateOne(
           { email },
           { $set: { availableTime: updatedSlots } }
         );
-    
+
         if (result.modifiedCount === 1) {
-          res.json({ message: 'Slot deleted successfully' });
+          res.json({ message: "Slot deleted successfully" });
         } else {
-          res.status(500).json({ error: 'Failed to delete slot' });
+          res.status(500).json({ error: "Failed to delete slot" });
         }
       } catch (err) {
-        console.error('Error deleting slot:', err);
-        res.status(500).send('Internal server error');
+        console.error("Error deleting slot:", err);
+        res.status(500).send("Internal server error");
       }
     });
-    
 
     //----------------------------------------------------
     //----------------------------------------------------
 
     // user related api
+    //create a new user instance when  someone create a new account
     app.post("/user", async (req, res) => {
       const userInfo = req.body;
       const query = { email: userInfo.email };
@@ -217,6 +234,33 @@ async function run() {
       res.send(result);
     });
 
+    // Update user profile
+    app.put("/users/:email", async (req, res) => {
+      const email = req.params.email;
+      const { fullName, profilePicture } = req.body;
+
+      try {
+        const result = await userCollection.updateOne(
+          { email },
+          {
+            $set: {
+              name: fullName,
+              profilePicture: profilePicture,
+            },
+          },
+          { upsert: true }
+        );
+
+        if (result.modifiedCount > 0) {
+          res.status(200).send({ message: "Profile updated successfully" });
+        } else {
+          res.status(404).send({ message: "User not found" });
+        }
+      } catch (error) {
+        res.status(500).send({ message: "Failed to update profile", error });
+      }
+    });
+
     //----------------------------------------------------
     //----------------------------------------------------
     // trainer related api
@@ -241,14 +285,13 @@ async function run() {
       const result = await trainerCollection.find(query).toArray();
       res.send(result);
     });
-    //load trainer by id
+    //load trainer by id or email
     app.get("/trainers/:data", async (req, res) => {
       const data = req.params.data;
       let query = {};
-      if(data.includes('@')){
-        query = {email:data};
-      }
-      else{
+      if (data.includes("@")) {
+        query = { email: data };
+      } else {
         query = { _id: new ObjectId(data) };
       }
       const result = await trainerCollection.findOne(query);
@@ -414,31 +457,26 @@ async function run() {
       const result = await newsLetterCollection.find().toArray();
       res.send(result);
     });
-    
+
     //forums related api
-      // Add Forum Post API
-  app.post('/forums', async (req, res) => {
-    const { title, content, imageUrl, author, email, role } = req.body;
+    // Add Forum Post API
+    app.post("/forums", async (req, res) => {
+      const postInfo = req.body;
 
-    const newPost = {
-      title,
-      content,
-      imageUrl, // Add imageUrl to the newPost object
-      author,
-      email,
-      role,
-      createdAt: new Date()
-    };
+      const newPost = {
+        ...postInfo,
+        createdAt: new Date(),
+      };
 
-    try {
-      const result = await forumCollection.insertOne(newPost);
+      try {
+        const result = await forumCollection.insertOne(newPost);
 
-     res.send(result);
-    } catch (err) {
-      console.error('Error adding forum post:', err);
-      res.status(500).send('Internal server error');
-    }
-  });
+        res.send(result);
+      } catch (err) {
+        console.error("Error adding forum post:", err);
+        res.status(500).send("Internal server error");
+      }
+    });
 
     await client.db("admin").command({ ping: 1 });
     console.log(
