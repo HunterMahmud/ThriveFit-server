@@ -277,6 +277,21 @@ async function run() {
       const result = await trainerCollection.insertOne(trainerInfo);
       res.send(result);
     });
+    app.patch('/trainers/:id/reject', async(req,res)=> {
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const options = {$upsert: true};
+      const {feedback} = req.body;
+      // console.log(info);
+      const updatedDoc = {
+        $set: {
+          status: 'rejected',
+          feedbackMessage: feedback
+        },
+      }
+      const result = await trainerCollection.updateOne(query,updatedDoc,options);
+      res.send(result);
+})
     // load all trainers with status is success/pending depends on query
     app.get("/trainers", async (req, res) => {
       const { status } = req.query;
@@ -323,16 +338,16 @@ async function run() {
     //----------------------------------------------------
 
     // classes apis
-    // get all the class with full details
+    // get all the class with full details with all trainers who have this class
     app.get("/classes", async (req, res) => {
       try {
         const classes = await classeCollection.find().toArray();
-
+    
         const classesWithTrainers = await Promise.all(
           classes.map(async (classItem) => {
             const foundTrainers = await trainerCollection
               .find({
-                skills: { $elemMatch: { value: classItem.name.toLowerCase() } },
+                "slots.selectedClasses.value": classItem.name,
               })
               .project({
                 _id: 1,
@@ -340,20 +355,21 @@ async function run() {
                 profileImage: 1,
               })
               .toArray();
-
+    
             return {
               ...classItem,
               foundTrainers,
             };
           })
         );
-
+    
         res.send(classesWithTrainers);
       } catch (error) {
         console.error(error);
         res.status(500).send("Internal Server Error");
       }
     });
+    
     // get only class names
     app.get("/classnames", async (req, res) => {
       const options = {
@@ -366,6 +382,7 @@ async function run() {
     app.post("/classes", async (req, res) => {
       const classInfo = req.body;
       // console.log(classInfo);
+      
       const result = await classeCollection.insertOne(classInfo);
       res.send(result);
     });
@@ -444,21 +461,14 @@ async function run() {
 
     //----------------------------------------------------
     //----------------------------------------------------
-    /// other api
-    //newsletter post
-    app.post("/newsletter", async (req, res) => {
-      const info = req.body;
-      // console.log(info);
-      const result = await newsLetterCollection.insertOne(info);
-      res.send(result);
-    });
-    //newsletter get
-    app.get("/newsletter", async (req, res) => {
-      const result = await newsLetterCollection.find().toArray();
-      res.send(result);
-    });
-
     //forums related api
+    // get a single post with id
+    app.get("/posts/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await forumCollection.findOne(query);
+      res.send(result);
+    });
     // Add Forum Post API
     app.post("/forums", async (req, res) => {
       const postInfo = req.body;
@@ -477,7 +487,72 @@ async function run() {
         res.status(500).send("Internal server error");
       }
     });
+    // Get posts with pagination
+    app.get("/api/posts", async (req, res) => {
+      try {
+        const { page = 1, limit = 6 } = req.query;
+        // console.log(limit);
+        const posts = await forumCollection
+          .find()
+          .sort({ createdAt: -1 })
+          .skip((page - 1) * limit)
+          .limit(parseInt(limit))
+          .toArray();
 
+        const totalPosts = await forumCollection.countDocuments();
+        res.json({
+          posts,
+          totalPosts,
+          totalPages: Math.ceil(totalPosts / limit),
+          currentPage: parseInt(page),
+        });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Update upvote
+    app.patch("/posts/:id/upvote", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const result = await forumCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $inc: { upvote: 1 } }
+        );
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Update downvote
+    app.patch("/posts/:id/downvote", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const result = await forumCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $inc: { downvote: 1 } }
+        );
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+    //----------------------------------------------------
+    //----------------------------------------------------
+    /// other api
+    //newsletter post
+    app.post("/newsletter", async (req, res) => {
+      const info = req.body;
+      // console.log(info);
+      const result = await newsLetterCollection.insertOne(info);
+      res.send(result);
+    });
+    //newsletter get
+    app.get("/newsletter", async (req, res) => {
+      const result = await newsLetterCollection.find().toArray();
+      res.send(result);
+    });
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
