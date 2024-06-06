@@ -48,7 +48,7 @@ async function run() {
     //jwt sign / token generate when login
     app.post("/jwt", async (req, res) => {
       const user = req.body;
-      console.log("this is new user",user);
+      // console.log("this is new user",user);
       const token = jwt.sign(user, process.env.SECRET, {
         expiresIn: "1h",
       });
@@ -94,7 +94,7 @@ async function run() {
       }
       next();
     };
-    //verify trainer middleware
+    //verify admin or trainer middleware
     const verifyAdminOrTrainer = async (req, res, next) => {
       const email = req.decoded?.email;
       const user = await userCollection.findOne({ email });
@@ -149,7 +149,7 @@ async function run() {
           return res.status(404).json({ error: "Trainer not found" });
         }
 
-        const slots = trainer.availableTime;
+        const slots = trainer.slots;
         // console.log("slots: ",slots);
         // Get the payment info for the slots
         const payments = await paymentCollection
@@ -197,27 +197,28 @@ async function run() {
     });
 
     //delete a slot by trainers email and slotValue  // need to update
-    app.delete("/trainer-slots/:email/:slotValue", async (req, res) => {
-      const { email, slotValue } = req.params;
-
+    app.delete("/trainer-slots/:email/:slotName", async (req, res) => {
+      const { email, slotName } = req.params;
+    
       try {
+        // Find the trainer by email
         const trainer = await trainerCollection.findOne({ email });
-
+    
         if (!trainer) {
           return res.status(404).json({ error: "Trainer not found" });
         }
-
+    
         // Filter out the slot to delete
-        const updatedSlots = trainer.availableTime.filter(
-          (slot) => slot.value !== slotValue
+        const updatedSlots = trainer.slots.filter(
+          (slot) => slot.slotName !== slotName
         );
-
-        // Update the trainer document with the new availableTime array
+    
+        // Update the trainer document with the new slots array
         const result = await trainerCollection.updateOne(
           { email },
-          { $set: { availableTime: updatedSlots } }
+          { $set: { slots: updatedSlots } }
         );
-
+    
         if (result.modifiedCount === 1) {
           res.json({ message: "Slot deleted successfully" });
         } else {
@@ -228,7 +229,7 @@ async function run() {
         res.status(500).send("Internal server error");
       }
     });
-
+    
     //----------------------------------------------------
     //----------------------------------------------------
 
@@ -663,7 +664,7 @@ async function run() {
       res.send(result);
     });
     //newsletter get
-    app.get("/newsletter", async (req, res) => {
+    app.get("/newsletter", verifyToken, verifyAdmin, async (req, res) => {
       const result = await newsLetterCollection.find().toArray();
       res.send(result);
     });
