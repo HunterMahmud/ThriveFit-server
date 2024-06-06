@@ -99,7 +99,7 @@ async function run() {
       const email = req.decoded?.email;
       const user = await userCollection.findOne({ email });
 
-      if (user?.role !== "trainer" || user?.role!=='admin') {
+      if (user?.role !== "trainer" || user?.role !=='admin') {
         return res.status(403).send({ message: "forbidden access" });
       }
       next();
@@ -249,7 +249,7 @@ async function run() {
     });
 
     // user role update method using patch by email
-    app.patch("/user/:email", async (req, res) => {
+    app.patch("/user/:email",verifyToken, verifyAdmin, async (req, res) => {
       const email = req.params.email;
       const { role } = req.body;
       // console.log(email);
@@ -326,7 +326,7 @@ async function run() {
       );
       res.send(result);
     });
-    // load all trainers with status is success/pending depends on query
+    // load all trainers with status is success/pending depends on query it will be public
     app.get("/trainers", async (req, res) => {
       const { status } = req.query;
       // console.log(status);
@@ -334,7 +334,7 @@ async function run() {
       const result = await trainerCollection.find(query).toArray();
       res.send(result);
     });
-    //load trainer by id or email
+    //load trainer by id or email 
     app.get("/trainers/:data", async (req, res) => {
       const data = req.params.data;
       let query = {};
@@ -347,7 +347,7 @@ async function run() {
       res.send(result);
     });
     //delete specific trainers by id
-    app.delete("/trainers/:id", async (req, res) => {
+    app.delete("/trainers/:id",verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       console.log(id);
       const query = { _id: new ObjectId(id) };
@@ -479,7 +479,7 @@ async function run() {
       }
     });
     /// add new class
-    app.post("/classes", async (req, res) => {
+    app.post("/classes", verifyToken,verifyAdmin, async (req, res) => {
       const classInfo = req.body;
       // console.log(classInfo);
 
@@ -490,7 +490,7 @@ async function run() {
     //----------------------------------------------------
     //----------------------------------------------------
     // total balance and get 6 leatest transactins details
-    app.get("/balance-transactions", async (req, res) => {
+    app.get("/balance-transactions",verifyToken,verifyAdmin, async (req, res) => {
       try {
         // Calculate total balance
         const balancePipeline = [
@@ -535,7 +535,7 @@ async function run() {
 
     //get all the unique email occured in payments collection
 
-    app.get("/unique-emails", async (req, res) => {
+    app.get("/unique-emails",verifyToken, verifyAdmin, async (req, res) => {
       try {
         const pipeline = [
           {
@@ -570,7 +570,7 @@ async function run() {
       res.send(result);
     });
     // Add Forum Post API
-    app.post("/forums", async (req, res) => {
+    app.post("/forums",verifyToken, verifyAdminOrTrainer, async (req, res) => {
       const postInfo = req.body;
 
       const newPost = {
