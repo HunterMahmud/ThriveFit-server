@@ -44,22 +44,36 @@ async function run() {
 
     //----------------------------------------------------
     //----------------------------------------------------
+    //jwt related api
+    //jwt sign / token generate when login
+    app.post("/jwt", async (req, res) => {
+      const user = req.body;
+      console.log("this is new user",user);
+      const token = jwt.sign(user, process.env.SECRET, {
+        expiresIn: "1h",
+      });
+
+      res.send({ token });
+    });
+
     // verify functions
     // user defined middleware
     const verifyToken = async (req, res, next) => {
-      const token = req.cookies?.token;
-      //console.log(token);
-      if (!token) {
+      if(!req.headers?.authorization){
         return res.status(401).send({ message: "not authorized" });
       }
+      const token = req.headers?.authorization.split(' ')[1];
+      // console.log(token);
+     
       jwt.verify(token, process.env.SECRET, (err, decoded) => {
         if (err) {
           return res.status(401).send({ message: "unauthorized" });
         }
-        req.user = decoded;
+        req.decoded = decoded;
         next();
       });
     };
+
     //verify admin middleware
     const verifyAdmin = async (req, res, next) => {
       const email = req.decoded?.email;
@@ -70,17 +84,28 @@ async function run() {
       }
       next();
     };
+    //verify trainer middleware
+    const verifyTrainer = async (req, res, next) => {
+      const email = req.decoded?.email;
+      const user = await userCollection.findOne({ email });
 
-    //jwt related api
-    //jwt sign / token generate when login
-    app.post("/jwt", async (req, res) => {
-      const user = req.body;
-      const token = jwt.sign(user, process.env.SECRET, {
-        expiresIn: "1h",
-      });
+      if (user?.role !== "trainer") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+    //verify trainer middleware
+    const verifyAdminOrTrainer = async (req, res, next) => {
+      const email = req.decoded?.email;
+      const user = await userCollection.findOne({ email });
 
-      res.send({ token });
-    });
+      if (user?.role !== "trainer" || user?.role!=='admin') {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+
+    
 
     //----------------------------------------------------
     //----------------------------------------------------
@@ -96,17 +121,20 @@ async function run() {
     //----------------------------------------------------
     // admin related api
     //checking using admin or not
-    app.get("/user/role/:email", async (req, res) => {
+    app.get("/user/role/:email",verifyToken, async (req, res) => {
+      
       const email = req.params.email;
+      // console.log(email);
       //Todo: make this below line un comment when jwt and other verification done
-      // if(email!==req.decoded.email){
-      //   return res.status(403).send({message: 'forbidden access'})
-      // }
-      const user = await userCollection.findOne({ email });
-      if (user?.role) {
-        res.send({ role: user?.role });
+      if(email!==req.decoded?.email){
+        return res.status(403).send({message: 'forbidden access'})
       }
-      res.send({ message: "user not authorized" });
+      const user = await userCollection.findOne({ email });
+      // console.log(user);
+      if (user?.role) {
+        return res.send(user?.role );
+      }
+      return res.send({ message: "user not authorized" });
     });
     //----------------------------------------------------
     //----------------------------------------------------
@@ -393,6 +421,30 @@ async function run() {
         res.status(500).send("Internal Server Error");
       }
     });
+    /// increase selected classes's totalBooked count by one
+    app.put("/classes/update-bookings", async (req, res) => {
+      const selectedClasses = req.body.selectedClasses; // Expecting an array of class names
+      
+      if (!Array.isArray(selectedClasses) || selectedClasses.length === 0) {
+        return res.status(400).send("Invalid request: selectedClasses must be a non-empty array.");
+      }
+    
+      try {
+        const updatePromises = selectedClasses.map((classItem) => {
+          return classeCollection.updateOne(
+            { name: classItem.value },
+            { $inc: { totalBooked: 1 } }
+          );
+        });
+    
+        await Promise.all(updatePromises);
+    
+        res.send("Classes updated successfully");
+      } catch (error) {
+        console.error(error);
+        res.status(500).send("Internal Server Error");
+      }
+    });
 
     /// get featured class by its popularity
 
@@ -403,20 +455,27 @@ async function run() {
           .sort({ totalBooked: -1 })
           .limit(6)
           .toArray();
-        res.send(featuredClasses);
+        return res.send(featuredClasses);
       } catch (error) {
         console.error(error);
         res.status(500).send("Internal Server Error");
       }
     });
+    
+
 
     // get only class names
     app.get("/classnames", async (req, res) => {
-      const options = {
-        projection: { _id: 0, name: 1 },
-      };
-      const result = await classeCollection.find({}, options).toArray();
-      res.send(result);
+      try{
+        const options = {
+          projection: { _id: 0, name: 1 },
+        };
+        const result = await classeCollection.find({}, options).toArray();
+        return res.send(result);
+      }
+      catch(err){
+        res.sendStatus(500).send("Internal Server Error");
+      }
     });
     /// add new class
     app.post("/classes", async (req, res) => {
