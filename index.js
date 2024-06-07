@@ -7,7 +7,6 @@ const port = process.env.PORT || 3000;
 
 const app = express();
 
-//middleware
 app.use(
   cors({
     origin: [
@@ -94,6 +93,16 @@ async function run() {
       }
       next();
     };
+    //verify member middleware
+    const verifyMember = async (req, res, next) => {
+      const email = req.decoded?.email;
+      const user = await userCollection.findOne({ email });
+
+      if (user?.role !== "member") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
     //verify admin or trainer middleware
     const verifyAdminOrTrainer = async (req, res, next) => {
       const email = req.decoded?.email;
@@ -119,13 +128,12 @@ async function run() {
 
     //----------------------------------------------------
     //----------------------------------------------------
-    // admin related api
-    //checking using admin or not
+
+    //getting user role by email
     app.get("/user/role/:email",verifyToken, async (req, res) => {
       
       const email = req.params.email;
       // console.log(email);
-      //Todo: make this below line un comment when jwt and other verification done
       if(email!==req.decoded?.email){
         return res.status(403).send({message: 'forbidden access'})
       }
@@ -140,8 +148,11 @@ async function run() {
     //----------------------------------------------------
     //slot related api
     // get all slot of the specific user by user email
-    app.get("/trainer-slots/:email", async (req, res) => {
+    app.get("/trainer-slots/:email", verifyToken, verifyTrainer, async (req, res) => {
       const email = req.params.email;
+      if(email !== req.decoded?.email){
+        return res.status(403).send({message:'forbidden access'});
+      }
       // console.log(email);
       try {
         const trainer = await trainerCollection.findOne({ email });
@@ -166,8 +177,11 @@ async function run() {
     });
 
     // add new slot to the
-    app.post("/trainer-add-slot/:email", async (req, res) => {
+    app.post("/trainer-add-slot/:email", verifyToken, verifyTrainer, async (req, res) => {
       const { email } = req.params;
+      if(email !== req.decoded?.email){
+        return res.status(403).send({message: 'forbidden access'});
+      }
       const { slotName, slotTime, availableDays, selectedClasses } = req.body;
 
       try {
@@ -197,8 +211,11 @@ async function run() {
     });
 
     //delete a slot by trainers email and slotValue  // need to update
-    app.delete("/trainer-slots/:email/:slotName", async (req, res) => {
+    app.delete("/trainer-slots/:email/:slotName", verifyToken, verifyTrainer, async (req, res) => {
       const { email, slotName } = req.params;
+      if(email !== req.decoded?.email){
+        return res.status(403).send({message: 'forbidden access'});
+      }
     
       try {
         // Find the trainer by email
@@ -264,8 +281,11 @@ async function run() {
     });
 
     // Update user profile
-    app.put("/users/:email", async (req, res) => {
+    app.put("/users/:email", verifyToken, verifyMember, async (req, res) => {
       const email = req.params.email;
+      if(req.decoded?.email !==email){
+        return res.status(403).send({message: 'forbidden access'})
+      }
       const { fullName, profilePicture } = req.body;
 
       try {
@@ -294,20 +314,21 @@ async function run() {
     //----------------------------------------------------
     // trainer related api
     //apply for trainers from member
-    app.post("/trainers", async (req, res) => {
+    app.post("/trainers",verifyToken, verifyMember, async (req, res) => {
       const trainerInfo = req.body;
       // console.log(trainerInfo);
       const isExists = await trainerCollection.findOne({
         email: trainerInfo.email,
       });
+      // console.log(isExists.status);
       if (isExists) {
-        return res.send({ message: "pending" });
+        return res.send({ message: isExists?.status });
       }
       const result = await trainerCollection.insertOne(trainerInfo);
       res.send(result);
     });
     //reject the trainer by id
-    app.patch("/trainers/:id/reject", async (req, res) => {
+    app.patch("/trainers/:id/reject", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const options = { $upsert: true };
@@ -355,7 +376,7 @@ async function run() {
       res.send(result);
     });
     // find trainers by id and update the status by pending to success
-    app.patch("/trainers/:id", async (req, res) => {
+    app.patch("/trainers/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       console.log(id);
       const query = { _id: new ObjectId(id) };
