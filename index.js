@@ -375,7 +375,7 @@ async function run() {
     // get all the class with full details with all trainers who have this class with pagination and search functionality
     app.get("/classes", async (req, res) => {
       try {
-        const { page = 1, limit = 6, search = "" } = req.query;
+        const { page = 1, limit = 6, search = "", sort = 1 } = req.query;
         const skip = (page - 1) * limit;
 
         // Create a filter object for the search functionality
@@ -387,6 +387,7 @@ async function run() {
           .find(filter)
           .skip(skip)
           .limit(parseInt(limit))
+          .sort({totalBooked:sort})
           .toArray();
 
         const totalClasses = await classeCollection.countDocuments(filter);
@@ -396,7 +397,7 @@ async function run() {
             const foundTrainers = await trainerCollection
               .find({
                 "slots.selectedClasses.value": classItem.name,
-              })
+              }).limit(3)
               .project({
                 _id: 1,
                 fullName: 1,
@@ -423,7 +424,7 @@ async function run() {
       }
     });
     /// increase selected classes's totalBooked count by one
-    app.put("/classes/update-bookings", async (req, res) => {
+    app.put("/classes/update-bookings",verifyToken,  async (req, res) => {
       const selectedClasses = req.body.selectedClasses; // Expecting an array of class names
       
       if (!Array.isArray(selectedClasses) || selectedClasses.length === 0) {
@@ -447,26 +448,12 @@ async function run() {
       }
     });
 
-    /// get featured class by its popularity
-
-    app.get("/featured-classes", async (req, res) => {
-      try {
-        const featuredClasses = await classeCollection
-          .find()
-          .sort({ totalBooked: -1 })
-          .limit(6)
-          .toArray();
-        return res.send(featuredClasses);
-      } catch (error) {
-        console.error(error);
-        res.status(500).send("Internal Server Error");
-      }
-    });
+   
     
 
 
     // get only class names
-    app.get("/classnames", async (req, res) => {
+    app.get("/classnames",verifyToken, verifyTrainer, async (req, res) => {
       try{
         const options = {
           projection: { _id: 0, name: 1 },
