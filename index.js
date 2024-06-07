@@ -10,9 +10,9 @@ const app = express();
 app.use(
   cors({
     origin: [
-      "http://localhost:5173",
-      //   "thrive-fit-f0d68.web.app",
-      //   "thrive-fit-f0d68.firebaseapp.com",
+      // "http://localhost:5173",
+        "https://thrive-fit-f0d68.web.app",
+        "https://thrive-fit-f0d68.firebaseapp.com",
       //other links will be here
     ],
     credentials: true,
