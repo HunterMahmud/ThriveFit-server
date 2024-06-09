@@ -11,8 +11,8 @@ app.use(
   cors({
     origin: [
       // "http://localhost:5173",
-        "https://thrive-fit-f0d68.web.app",
-        "https://thrive-fit-f0d68.firebaseapp.com",
+      "https://thrive-fit-f0d68.web.app",
+      "https://thrive-fit-f0d68.firebaseapp.com",
       //other links will be here
     ],
     credentials: true,
@@ -58,12 +58,11 @@ async function run() {
     // verify functions
     // user defined middleware
     const verifyToken = async (req, res, next) => {
-      if(!req.headers?.authorization){
+      if (!req.headers?.authorization) {
         return res.status(401).send({ message: "not authorized" });
       }
-      const token = req.headers?.authorization.split(' ')[1];
+      const token = req.headers?.authorization.split(" ")[1];
       // console.log(token);
-     
       jwt.verify(token, process.env.SECRET, (err, decoded) => {
         if (err) {
           return res.status(401).send({ message: "unauthorized" });
@@ -107,14 +106,13 @@ async function run() {
     const verifyAdminOrTrainer = async (req, res, next) => {
       const email = req.decoded?.email;
       const user = await userCollection.findOne({ email });
-
-      if (user?.role !== "trainer" || user?.role !=='admin') {
+// console.log(user);
+      if (user?.role !== "trainer" && user?.role !== "admin") {
+        // console.log(user?.role);
         return res.status(403).send({ message: "forbidden access" });
       }
       next();
     };
-
-    
 
     //----------------------------------------------------
     //----------------------------------------------------
@@ -130,17 +128,16 @@ async function run() {
     //----------------------------------------------------
 
     //getting user role by email
-    app.get("/user/role/:email",verifyToken, async (req, res) => {
-      
+    app.get("/user/role/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
       // console.log(email);
-      if(email!==req.decoded?.email){
-        return res.status(403).send({message: 'forbidden access'})
+      if (email !== req.decoded?.email) {
+        return res.status(403).send({ message: "forbidden access" });
       }
       const user = await userCollection.findOne({ email });
       // console.log(user);
       if (user?.role) {
-        return res.send(user?.role );
+        return res.send(user?.role);
       }
       return res.send({ message: "user not authorized" });
     });
@@ -148,105 +145,132 @@ async function run() {
     //----------------------------------------------------
     //slot related api
     // get all slot of the specific user by user email
-    app.get("/trainer-slots/:email", verifyToken, verifyTrainer, async (req, res) => {
-      const email = req.params.email;
-      if(email !== req.decoded?.email){
-        return res.status(403).send({message:'forbidden access'});
-      }
-      // console.log(email);
-      try {
-        const trainer = await trainerCollection.findOne({ email });
-        if (!trainer) {
-          return res.status(404).json({ error: "Trainer not found" });
+    app.get(
+      "/trainer-slots/:email",
+      verifyToken,
+      verifyTrainer,
+      async (req, res) => {
+        const email = req.params.email;
+        if (email !== req.decoded?.email) {
+          return res.status(403).send({ message: "forbidden access" });
         }
-
-        const slots = trainer.slots;
-        // console.log("slots: ",slots);
-        // Get the payment info for the slots
-        const payments = await paymentCollection
-          .find({ trainerEmail: email })
-          .toArray();
-        // console.log("payments: ",payments);
-        // Combine slots and payment info
-
-        res.json({ payments, slots });
-      } catch (err) {
-        // console.error('Error getting trainer slots:', err);
-        res.status(500).send("Internal server error");
-      }
-    });
-
-    // add new slot to the
-    app.post("/trainer-add-slot/:email", verifyToken, verifyTrainer, async (req, res) => {
-      const { email } = req.params;
-      if(email !== req.decoded?.email){
-        return res.status(403).send({message: 'forbidden access'});
-      }
-      const { slotName, slotTime, availableDays, selectedClasses } = req.body;
-
-      try {
-        const result = await trainerCollection.updateOne(
-          { email },
-          {
-            $push: {
-              slots: {
-                slotName,
-                slotTime,
-                availableDays,
-                selectedClasses,
-              },
-            },
+        // console.log(email);
+        try {
+          const trainer = await trainerCollection.findOne({ email });
+          if (!trainer) {
+            return res.status(404).json({ error: "Trainer not found" });
           }
-        );
 
-        if (result.modifiedCount > 0) {
-          res.status(200).send({ message: "Slot added successfully" });
-        } else {
-          res.status(404).send("Trainer not found");
+          const slots = trainer.slots;
+          // console.log("slots: ",slots);
+          // Get the payment info for the slots
+          const payments = await paymentCollection
+            .find({ trainerEmail: email })
+            .toArray();
+          // console.log("payments: ",payments);
+          // Combine slots and payment info
+
+          res.json({ payments, slots });
+        } catch (err) {
+          // console.error('Error getting trainer slots:', err);
+          res.status(500).send("Internal server error");
         }
-      } catch (err) {
-        console.error("Error adding slot:", err);
-        res.status(500).send("Internal server error");
       }
-    });
+    );
+
+    // delete trainer by email
+    app.delete("/trainer/:email",verifyToken, verifyMember, async(req, res)=> {
+      const email = req.params.email;
+      const reqEmail = req.decoded?.email;
+      if(reqEmail !== email){
+        return res.status(401).send({message: 'unauthorized access'})
+      }
+      const result = await trainerCollection.deleteOne({email});
+      console.log(result);
+      res.send(result);
+     
+    })
+    // add new slot to the
+    app.post(
+      "/trainer-add-slot/:email",
+      verifyToken,
+      verifyTrainer,
+      async (req, res) => {
+        const { email } = req.params;
+        if (email !== req.decoded?.email) {
+          return res.status(403).send({ message: "forbidden access" });
+        }
+        const { slotName, slotTime, availableDays, selectedClasses } = req.body;
+
+        try {
+          const result = await trainerCollection.updateOne(
+            { email },
+            {
+              $push: {
+                slots: {
+                  slotName,
+                  slotTime,
+                  availableDays,
+                  selectedClasses,
+                },
+              },
+            }
+          );
+
+          if (result.modifiedCount > 0) {
+            res.status(200).send({ message: "Slot added successfully" });
+          } else {
+            res.status(404).send("Trainer not found");
+          }
+        } catch (err) {
+          console.error("Error adding slot:", err);
+          res.status(500).send("Internal server error");
+        }
+      }
+    );
 
     //delete a slot by trainers email and slotValue  // need to update
-    app.delete("/trainer-slots/:email/:slotName", verifyToken, verifyTrainer, async (req, res) => {
-      const { email, slotName } = req.params;
-      if(email !== req.decoded?.email){
-        return res.status(403).send({message: 'forbidden access'});
-      }
-    
-      try {
-        // Find the trainer by email
-        const trainer = await trainerCollection.findOne({ email });
-    
-        if (!trainer) {
-          return res.status(404).json({ error: "Trainer not found" });
+    app.delete(
+      "/trainer-slots/:email/:slotName",
+      verifyToken,
+      verifyTrainer,
+      async (req, res) => {
+        const { email, slotName } = req.params;
+        if (email !== req.decoded?.email) {
+          return res.status(403).send({ message: "forbidden access" });
         }
-    
-        // Filter out the slot to delete
-        const updatedSlots = trainer.slots.filter(
-          (slot) => slot.slotName !== slotName
-        );
-    
-        // Update the trainer document with the new slots array
-        const result = await trainerCollection.updateOne(
-          { email },
-          { $set: { slots: updatedSlots } }
-        );
-    
-        if (result.modifiedCount === 1) {
-          res.json({ message: "Slot deleted successfully" });
-        } else {
-          res.status(500).json({ error: "Failed to delete slot" });
+
+        try {
+          // Find the trainer by email
+          const trainer = await trainerCollection.findOne({ email });
+
+          if (!trainer) {
+            return res.status(404).json({ error: "Trainer not found" });
+          }
+
+          // Filter out the slot to delete
+          const updatedSlots = trainer.slots.filter(
+            (slot) => slot.slotName !== slotName
+          );
+
+          // Update the trainer document with the new slots array
+          const result = await trainerCollection.updateOne(
+            { email },
+            { $set: { slots: updatedSlots } }
+          );
+
+          if (result.modifiedCount === 1) {
+            res.json({ message: "Slot deleted successfully" });
+          } else {
+            res.status(500).json({ error: "Failed to delete slot" });
+          }
+        } catch (err) {
+          console.error("Error deleting slot:", err);
+          res.status(500).send("Internal server error");
         }
-      } catch (err) {
-        console.error("Error deleting slot:", err);
-        res.status(500).send("Internal server error");
       }
-    });
-    
+    );
+
     //----------------------------------------------------
     //----------------------------------------------------
 
@@ -266,7 +290,7 @@ async function run() {
     });
 
     // user role update method using patch by email
-    app.patch("/user/:email",verifyToken, verifyAdmin, async (req, res) => {
+    app.patch("/user/:email", verifyToken, verifyAdmin, async (req, res) => {
       const email = req.params.email;
       const { role } = req.body;
       // console.log(email);
@@ -283,8 +307,8 @@ async function run() {
     // Update user profile
     app.put("/users/:email", verifyToken, verifyMember, async (req, res) => {
       const email = req.params.email;
-      if(req.decoded?.email !==email){
-        return res.status(403).send({message: 'forbidden access'})
+      if (req.decoded?.email !== email) {
+        return res.status(403).send({ message: "forbidden access" });
       }
       const { fullName, profilePicture } = req.body;
 
@@ -314,7 +338,7 @@ async function run() {
     //----------------------------------------------------
     // trainer related api
     //apply for trainers from member
-    app.post("/trainers",verifyToken, verifyMember, async (req, res) => {
+    app.post("/trainers", verifyToken, verifyMember, async (req, res) => {
       const trainerInfo = req.body;
       // console.log(trainerInfo);
       const isExists = await trainerCollection.findOne({
@@ -328,25 +352,30 @@ async function run() {
       res.send(result);
     });
     //reject the trainer by id
-    app.patch("/trainers/:id/reject", verifyToken, verifyAdmin, async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      const options = { $upsert: true };
-      const { feedback } = req.body;
-      // console.log(info);
-      const updatedDoc = {
-        $set: {
-          status: "rejected",
-          feedbackMessage: feedback,
-        },
-      };
-      const result = await trainerCollection.updateOne(
-        query,
-        updatedDoc,
-        options
-      );
-      res.send(result);
-    });
+    app.patch(
+      "/trainers/:id/reject",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const options = { $upsert: true };
+        const { feedback } = req.body;
+        // console.log(info);
+        const updatedDoc = {
+          $set: {
+            status: "rejected",
+            feedbackMessage: feedback,
+          },
+        };
+        const result = await trainerCollection.updateOne(
+          query,
+          updatedDoc,
+          options
+        );
+        res.send(result);
+      }
+    );
     // load all trainers with status is success/pending depends on query it will be public
     app.get("/trainers", async (req, res) => {
       const { status } = req.query;
@@ -355,7 +384,7 @@ async function run() {
       const result = await trainerCollection.find(query).toArray();
       res.send(result);
     });
-    //load trainer by id or email 
+    //load trainer by id or email
     app.get("/trainers/:data", async (req, res) => {
       const data = req.params.data;
       let query = {};
@@ -368,9 +397,9 @@ async function run() {
       res.send(result);
     });
     //delete specific trainers by id
-    app.delete("/trainers/:id",verifyToken, verifyAdmin, async (req, res) => {
+    app.delete("/trainers/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
-      console.log(id);
+      //console.log(id);
       const query = { _id: new ObjectId(id) };
       const result = await trainerCollection.deleteOne(query);
       res.send(result);
@@ -378,7 +407,7 @@ async function run() {
     // find trainers by id and update the status by pending to success
     app.patch("/trainers/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
-      console.log(id);
+      //console.log(id);
       const query = { _id: new ObjectId(id) };
       const updateDoc = {
         $set: {
@@ -408,7 +437,7 @@ async function run() {
           .find(filter)
           .skip(skip)
           .limit(parseInt(limit))
-          .sort({totalBooked:sort})
+          .sort({ totalBooked: sort })
           .toArray();
 
         const totalClasses = await classeCollection.countDocuments(filter);
@@ -418,7 +447,8 @@ async function run() {
             const foundTrainers = await trainerCollection
               .find({
                 "slots.selectedClasses.value": classItem.name,
-              }).limit(3)
+              })
+              .limit(3)
               .project({
                 _id: 1,
                 fullName: 1,
@@ -445,13 +475,15 @@ async function run() {
       }
     });
     /// increase selected classes's totalBooked count by one
-    app.put("/classes/update-bookings",verifyToken,  async (req, res) => {
+    app.put("/classes/update-bookings", verifyToken, async (req, res) => {
       const selectedClasses = req.body.selectedClasses; // Expecting an array of class names
-      
+
       if (!Array.isArray(selectedClasses) || selectedClasses.length === 0) {
-        return res.status(400).send("Invalid request: selectedClasses must be a non-empty array.");
+        return res
+          .status(400)
+          .send("Invalid request: selectedClasses must be a non-empty array.");
       }
-    
+
       try {
         const updatePromises = selectedClasses.map((classItem) => {
           return classeCollection.updateOne(
@@ -459,9 +491,9 @@ async function run() {
             { $inc: { totalBooked: 1 } }
           );
         });
-    
+
         await Promise.all(updatePromises);
-    
+
         res.send("Classes updated successfully");
       } catch (error) {
         console.error(error);
@@ -469,25 +501,20 @@ async function run() {
       }
     });
 
-   
-    
-
-
     // get only class names
-    app.get("/classnames",verifyToken, verifyTrainer, async (req, res) => {
-      try{
+    app.get("/classnames", verifyToken, verifyTrainer, async (req, res) => {
+      try {
         const options = {
           projection: { _id: 0, name: 1 },
         };
         const result = await classeCollection.find({}, options).toArray();
         return res.send(result);
-      }
-      catch(err){
+      } catch (err) {
         res.sendStatus(500).send("Internal Server Error");
       }
     });
     /// add new class
-    app.post("/classes", verifyToken,verifyAdmin, async (req, res) => {
+    app.post("/classes", verifyToken, verifyAdmin, async (req, res) => {
       const classInfo = req.body;
       // console.log(classInfo);
 
@@ -498,52 +525,57 @@ async function run() {
     //----------------------------------------------------
     //----------------------------------------------------
     // total balance and get 6 leatest transactins details
-    app.get("/balance-transactions",verifyToken,verifyAdmin, async (req, res) => {
-      try {
-        // Calculate total balance
-        const balancePipeline = [
-          {
-            $addFields: {
-              priceInt: { $toInt: "$price" },
+    app.get(
+      "/balance-transactions",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          // Calculate total balance
+          const balancePipeline = [
+            {
+              $addFields: {
+                priceInt: { $toInt: "$price" },
+              },
             },
-          },
-          {
-            $group: {
-              _id: null,
-              totalBalance: { $sum: "$priceInt" },
+            {
+              $group: {
+                _id: null,
+                totalBalance: { $sum: "$priceInt" },
+              },
             },
-          },
-        ];
-        const balanceResult = await paymentCollection
-          .aggregate(balancePipeline)
-          .toArray();
-        const totalBalance = balanceResult[0]?.totalBalance || 0;
+          ];
+          const balanceResult = await paymentCollection
+            .aggregate(balancePipeline)
+            .toArray();
+          const totalBalance = balanceResult[0]?.totalBalance || 0;
 
-        // Fetch recent transactions
-        const sort = { orderDate: -1 }; // Sort by orderDate descending
-        const limit = 6; // Limit to 6 recent transactions
-        const transactions = await paymentCollection
-          .find()
-          .sort(sort)
-          .limit(limit)
-          .toArray();
-        const formattedTransactions = transactions.map((t) => ({
-          username: t.userName,
-          orderDate: t.orderDate,
-          price: t.price,
-        }));
+          // Fetch recent transactions
+          const sort = { orderDate: -1 }; // Sort by orderDate descending
+          const limit = 6; // Limit to 6 recent transactions
+          const transactions = await paymentCollection
+            .find()
+            .sort(sort)
+            .limit(limit)
+            .toArray();
+          const formattedTransactions = transactions.map((t) => ({
+            username: t.userName,
+            orderDate: t.orderDate,
+            price: t.price,
+          }));
 
-        // Send combined result
-        res.json({ totalBalance, transactions: formattedTransactions });
-      } catch (err) {
-        console.error("Error getting balance and transactions:", err);
-        res.status(500).send("Internal server error");
+          // Send combined result
+          res.json({ totalBalance, transactions: formattedTransactions });
+        } catch (err) {
+          console.error("Error getting balance and transactions:", err);
+          res.status(500).send("Internal server error");
+        }
       }
-    });
+    );
 
     //get all the unique email occured in payments collection
 
-    app.get("/unique-emails",verifyToken, verifyAdmin, async (req, res) => {
+    app.get("/unique-emails", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const pipeline = [
           {
@@ -578,7 +610,7 @@ async function run() {
       res.send(result);
     });
     // Add Forum Post API
-    app.post("/forums",verifyToken, verifyAdminOrTrainer, async (req, res) => {
+    app.post("/forums", verifyToken, verifyAdminOrTrainer, async (req, res) => {
       const postInfo = req.body;
 
       const newPost = {
@@ -609,7 +641,7 @@ async function run() {
         res.status(500).send("Internal Server Error");
       }
     });
-  
+
     // Get posts with pagination
     app.get("/api/posts", async (req, res) => {
       try {
@@ -676,10 +708,11 @@ async function run() {
       const result = await newsLetterCollection.find().toArray();
       res.send(result);
     });
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    //todo: comment below line when final deploy
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
   }
 }
