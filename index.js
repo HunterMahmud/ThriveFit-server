@@ -10,7 +10,7 @@ const app = express();
 app.use(
   cors({
     origin: [
-      // "http://localhost:5173",
+      "http://localhost:5173",
       "https://thrive-fit-f0d68.web.app",
       "https://thrive-fit-f0d68.firebaseapp.com",
       //other links will be here
@@ -40,6 +40,7 @@ async function run() {
     const classeCollection = client.db("gymDB").collection("classes");
     const paymentCollection = client.db("gymDB").collection("payments");
     const forumCollection = client.db("gymDB").collection("forums");
+    const reviewCollection = client.db("gymDB").collection("reviews");
 
     //----------------------------------------------------
     //----------------------------------------------------
@@ -117,13 +118,46 @@ async function run() {
     //----------------------------------------------------
     //----------------------------------------------------
     //booking related api
-    app.post("/payment", async (req, res) => {
+    app.post("/payment", verifyToken, async (req, res) => {
       const paymentInfo = req.body;
       // console.log(paymentInfo);
       const result = await paymentCollection.insertOne(paymentInfo);
       res.send(result);
     });
 
+    //get the payment info by user email for booked classes
+
+    app.get('/buyer/:email', verifyToken, verifyMember,  async (req, res) => {
+      const email = req.params?.email;
+      const reqEmail = req.decoded?.email;
+      if(email !== reqEmail){
+        return res.status(401).send({message: 'unauthorized access'});
+      }
+      try {
+        const buyer = await paymentCollection.find({ userEmail: email}).toArray();
+        res.send(buyer);
+      } catch (error) {
+        res.status(500).send({ message: 'Error fetching buyer data' });
+      }
+    });
+    // save all the reviews
+    app.post('/reviews', verifyToken, verifyMember, async (req, res) => {
+      try {
+        const newReview = req.body;
+        const result = await reviewCollection.insertOne(newReview);
+        res.send(result);
+      } catch (error) {
+        res.status(500).json({ message: 'Error submitting review' });
+      }
+    });
+    app.get('/reviews', async(req, res)=>{
+      try{
+        const result = await reviewCollection.find().limit(5).toArray();
+        res.send(result);
+      }catch(err){
+        res.status(500).send({message: 'internal server error'});
+      }
+    })
     //----------------------------------------------------
     //----------------------------------------------------
 
