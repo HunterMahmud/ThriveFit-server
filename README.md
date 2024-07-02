@@ -1,4 +1,3 @@
-
 # Thrive Fit Server
 
 **Visit the live site:** [ThriveFit](https://thrive-fit-f0d68.web.app/).
@@ -34,12 +33,12 @@ This is the server-side code for the Thrive Fit application. It is built with No
    Create a `.env` file in the root of the project and add the following environment variables:
 
    ```env
-   PORT=your_port_number
-   MONGODB_URI=your_mongodb_uri
-   JWT_SECRET=your_jwt_secret
+   DB_USE=your_mongodb_user
+   DB_PASS=your_mongodb_password
+   SECRET=your_jwt_secret
    ```
 
-   Replace `your_port_number`, `your_mongodb_uri`, and `your_jwt_secret` with your actual values.
+   Replace `your_mongodb_user`, `your_mongodb_password`, and `your_jwt_secret` with your actual values.
 
 4. **Start the server**:
 
@@ -56,4 +55,3 @@ This is the server-side code for the Thrive Fit application. It is built with No
 ## Author
 
 - Hasan Al Mahmud
-
